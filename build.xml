@@ -1,0 +1,80 @@
+<project name="isd_qa_utils_jenkins_project" default="usage" basedir=".">
+  <property environment="env"/>
+  <property file="jenkins.properties"/>
+  <property name="jsonResultsFile" value="${env.runtime}${file.separator}ecs${file.separator}provisioningOutput${file.separator}ecsProvisioningJSONResults.out"/>
+
+  <target name="usage">
+    <echo>
+      ant showprops
+      ant downloadJenkinsCLIJar
+      ant downloadSlaveJar
+      ant addSlavesToJenkins
+      ant removeSlavesFromJenkins
+    </echo>
+  </target>
+  
+  <target name="showprops">
+    <echo>
+      Jenkins server name is ${JenkinsServerName}
+      Jenkins server port is ${JenkinsServerPort}
+    </echo>
+  </target>
+  
+  <target name="downloadJenkinsCLIJar">
+    <get src="http://${JenkinsServerName}:${JenkinsServerPort}/jnlpJars/jenkins-cli.jar" dest="${basedir}"/>
+  </target>
+  
+  <target name="downloadSlaveJar">
+    <get src="http://${JenkinsServerName}:${JenkinsServerPort}/jnlpJars/slave.jar" dest="${basedir}"/>
+  </target>
+  
+  <target name="addSlavesToJenkins">
+    <echo>
+      Running command:
+      python AddSlavesToJenkins.py
+      --JenkinsServerName=${JenkinsServerName}
+      --JenkinsServerPort=${JenkinsServerPort}
+      --JenkinsUsername=${JenkinsUsername}
+      --JenkinsPassword=${JenkinsPassword}
+      --JSONFileName=${jsonResultsFile}
+      --labelName=${labelName}
+      --NodeTemplateFileName=node_templ.xml
+      --SlaveUsername=${slaveUsername}
+      --SlavePassword=${slavePassword}
+      --SlaveJenkinsHome=${slaveJenkinsHome}
+    </echo>
+    <exec executable="python" failonerror="true">
+      <arg value="AddSlavesToJenkins.py"/>
+      <arg value="--JenkinsServerName=${JenkinsServerName}"/>
+      <arg value="--JenkinsServerPort=${JenkinsServerPort}"/>
+      <arg value="--JenkinsUsername=${JenkinsUsername}"/>
+      <arg value="--JenkinsPassword=${JenkinsPassword}"/>
+      <arg value="--JSONFileName=${jsonResultsFile}"/>
+      <arg value="--LabelName=${labelName}"/>
+      <arg value="--NodeTemplateFileName=node_templ.xml"/>
+      <arg value="--SlaveUsername=${slaveUsername}"/>
+      <arg value="--SlavePassword=${slavePassword}"/>
+      <arg value="--SlaveJenkinsHome=${slaveJenkinsHome}"/>
+    </exec>
+  </target>
+  
+  <target name="removeSlavesFromJenkins">
+    <echo>
+      Running command:
+      python RemoveSlavesFromJenkins.py
+      --JenkinsServerName=${JenkinsServerName}
+      --JenkinsServerPort=${JenkinsServerPort}
+      --JenkinsUsername=${JenkinsUsername}
+      --JenkinsPassword=${JenkinsPassword}
+      --JSONFileName=${jsonResultsFile}
+    </echo>
+    <exec executable="python" failonerror="true">
+      <arg value="RemoveSlavesFromJenkins.py"/>
+      <arg value="--JenkinsServerName=${JenkinsServerName}"/>
+      <arg value="--JenkinsServerPort=${JenkinsServerPort}"/>
+      <arg value="--JenkinsUsername=${JenkinsUsername}"/>
+      <arg value="--JenkinsPassword=${JenkinsPassword}"/>
+      <arg value="--JSONFileName=${jsonResultsFile}"/>
+    </exec>
+  </target>
+</project>
