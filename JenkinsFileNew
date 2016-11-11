@@ -1,0 +1,239 @@
+#!groovy
+
+//global variables
+
+//Shared folder on Windows server(EcsWorker): \\10.35.237.85\c$\JenkinsFiles
+sharedFolder = "/media/ecsworkershare/"
+
+//Environment
+envs = [:]
+
+@NonCPS
+def GetFullPath(fileName, workspace) {
+    f = new File(fileName)
+    if (!f.isFile()) {
+        f = new File(workspace, fileName)
+        if (!f.isFile()) {
+            f = new File(sharedFolder, fileName)
+        }
+    }
+    return f.getPath()
+}
+
+@NonCPS
+def ExecuteGroovyScripts(scripts) {
+    Calendar cal=Calendar.getInstance();
+    tmp = new File(sharedFolder, "TMP_${cal.getTimeInMillis()}.groovy")
+    tmp.write(scripts)
+    load tmp.getPath()
+    tmp.delete()
+}
+
+@NonCPS
+def GetTranslatedString(interpolatedStr) {
+    def matcher = (interpolatedStr =~ /\$\{.*?\}/)
+    for(mt in matcher){
+        if (envs[mt[2..-2]] != null) {
+            interpolatedStr = interpolatedStr.replace(mt, envs[mt[2..-2]])
+        }
+    }
+    return interpolatedStr
+}
+
+@NonCPS
+def AddBuildParamsToEnvs() {
+    for (param in params) {
+        envs.putAt(param.key, env[param.key])
+    }
+}
+
+@NonCPS
+def GetEnvs(xml) {
+    def envNodes = new XmlParser().parse(xml)
+    for(node in envNodes){
+        def envName = node.name()
+        def envValue = node.text()
+        if (envName == "include") {
+            def xmlFile = new File(xml)
+            def currDir = xmlFile.getParent()
+            includeFile = new File(currDir, envValue)
+            GetEnvs(includeFile.getPath())
+        }
+        else {
+            envs[envName] = GetTranslatedString(envValue)
+        }
+    }
+}
+
+@NonCPS
+def PrintEnv(e) {
+    String s = ""
+    for(itr in e){
+        s = s + itr.key + "=" + itr.value + "\n"
+    }
+    echo s
+}
+
+@NonCPS
+def GetNodeNames(String label) {
+    def names = []
+    for (node in hudson.model.Hudson.instance.getLabel(label).getNodes()) {
+        names.add(node.getNodeName())
+    }
+    
+    if(names.size() <= 0){
+        currentBuild.result = "FAILURE"
+        throw new Exception ("ERROR: can't find nodes with label [${label}], please make sure added to jenkins server!!!")		
+    }
+    return names
+}
+
+def EchoBat(label, commands, timeoutMin, continueOnFail) {
+    info = """
+    Run batch on ${label}
+    Timeout: ${timeoutMin} minutes
+    Continue if fail: ${continueOnFail}
+    Scripts:
+    ${commands}
+    """
+    echo info
+}
+
+def RunBAT(label, commands, timeoutMin, continueOnFail) {
+    EchoBat(label, commands, timeoutMin, continueOnFail)
+    try {
+        node(label) {
+            timeout(time:timeoutMin, unit:'MINUTES') {
+                bat commands
+            }
+        }
+    } catch(Exception ex) {
+        if(continueOnFail) {
+            currentBuild.result = "UNSTABLE"
+            echo "WARNING: Failed to execute commands on node with label [${label}]:\n${commands}\n${ex.toString()}"
+        } else {
+            throw new Exception ("ERROR: Failed to execute commands on node with label [${label}]:<br />${commands}", ex)
+        }
+    }
+}
+
+def ParseProj(xml) {
+    def proj = new XmlParser().parse(xml)
+    def branches = [:]
+    for(itr in proj){
+        def name = itr.name()
+        def runMode = itr.attribute("runMode")
+        def runOn = GetTranslatedString(itr.attribute("runOn"))
+        def runScript = GetTranslatedString(itr.attribute("runScript"))
+        def include = itr.attribute("include")
+        def continueStr = itr.attribute("continueOnFail")
+        def continueOnFail = (continueStr == null ? false : continueStr.toBoolean())
+        def timeoutStr = GetTranslatedString(itr.attribute("timeOut"))
+        def timeOutMinutes = (timeoutStr == null ? 65 : timeoutStr.toInteger())
+
+        /*  TODO:
+            Remove ugly block
+            if(branches.size() > 0){
+                parallel branches
+                branches.clear()
+            }
+        */
+        if(name == "groovy") {
+            if(branches.size() > 0){
+                parallel branches
+                branches.clear()
+            }
+            ExecuteGroovyScripts(runScript)
+            continue
+        }
+        if(name == "retag") {
+            if(branches.size() > 0){
+                parallel branches
+                branches.clear()
+            }
+            currentBuild.setDisplayName(GetTranslatedString(itr.attribute("tagName")))
+            continue
+        }
+        if(name == "stage"){
+            if(branches.size() > 0){
+                parallel branches
+                branches.clear()
+            }
+            stage itr.attribute("stageName")
+            //return  //windows 
+            continue  //ubuntu
+        }
+        if(name == "input"){
+            if(branches.size() > 0){
+                parallel branches
+                branches.clear()
+            }
+            input 'Ready to go?'
+            continue
+        }
+        if (runMode == null) {
+            if(branches.size() > 0){
+                parallel branches
+                branches.clear()
+            }
+            if(GetNodeNames(runOn)){
+                RunBAT(runOn,runScript,timeOutMinutes,continueOnFail)
+            }
+        } else if (runMode == "parallel_broadcast") {
+            for (nodeName in GetNodeNames(runOn)) {
+                def temp = nodeName
+                branches["${name}_on_${temp}"] = {
+                    RunBAT(temp, runScript, timeOutMinutes, continueOnFail)
+                }
+            }
+        } else if (runMode == "parallel") {
+            branches["${name}_on_${runOn}"] = {
+                RunBAT(runOn, runScript, timeOutMinutes, continueOnFail)
+            }
+        } else if (runMode == "broadcast") {
+            if (branches.size() > 0) {
+                parallel branches
+                branches.clear()
+            }
+            for (nodeName in GetNodeNames(runOn)) {
+                RunBAT(nodeName, runScript, timeOutMinutes, continueOnFail)
+            }
+        } else {
+            throw new Exception ("Incorrect mode")
+        }
+    }
+    if (branches.size() > 0 ) {                   
+        parallel branches
+        branches.clear()
+    }
+}
+
+def NotifyFailed(errorInfo, failRecipient) {
+    emailext (
+        subject: "BUILD FAILED: Job ${env.JOB_NAME} - Build # ${currentBuild.getDisplayName()}",
+        body: """<p>FAILED: ${env.JOB_NAME} - Build # ${currentBuild.getDisplayName()}</p>
+            <p>Check console output at <a href='${env.BUILD_URL}'>${env.JOB_NAME} ${currentBuild.getDisplayName()}</a> for details.</p>
+            <p>ERROR INFO:<br />${errorInfo}</p>
+            <p><br />Thanks<br />ICP Automation QA</p>""",
+        to: "${failRecipient}"
+    )
+}
+
+node('master') {
+    try{
+        timestamps {
+            ws = pwd() + '@script'
+            AddBuildParamsToEnvs()
+            envXml = GetFullPath(envs['ENVFILE'], ws)
+            projXml = GetFullPath(envs['PROJFILE'], ws)
+            GetEnvs(envXml)
+            PrintEnv(envs)
+            ParseProj(projXml)
+        }
+    } catch(Exception ex){
+        // Send failure notification
+        failRecipient = envs.containsKey('FAILRECIPIENT')? envs['FAILRECIPIENT'] : "aec.team.cetus@autodesk.com,v1g6h4a8d4l7q5d8@autodesk.slack.com"
+        //NotifyFailed(ex, failRecipient)
+        throw ex
+    }
+}
