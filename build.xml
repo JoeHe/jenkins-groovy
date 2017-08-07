@@ -10,22 +10,22 @@
       ant downloadSlaveJar
       ant addSlavesToJenkins
       ant removeSlavesFromJenkins
+      ant addSingleSlaveToJenkins
     </echo>
   </target>
   
   <target name="showprops">
     <echo>
       Jenkins server name is ${JenkinsServerName}
-      Jenkins server port is ${JenkinsServerPort}
     </echo>
   </target>
   
   <target name="downloadJenkinsCLIJar">
-    <get src="http://${JenkinsServerName}:${JenkinsServerPort}/jnlpJars/jenkins-cli.jar" dest="${basedir}"/>
+    <get src="${JenkinsServerName}jnlpJars/jenkins-cli.jar" dest="${basedir}"/>
   </target>
   
   <target name="downloadSlaveJar">
-    <get src="http://${JenkinsServerName}:${JenkinsServerPort}/jnlpJars/slave.jar" dest="${basedir}"/>
+    <get src="${JenkinsServerName}jnlpJars/slave.jar" dest="${basedir}"/>
   </target>
   
   <target name="addSlavesToJenkins">
@@ -33,7 +33,6 @@
       Running command:
       python AddSlavesToJenkins.py
       --JenkinsServerName=${JenkinsServerName}
-      --JenkinsServerPort=${JenkinsServerPort}
       --JenkinsUsername=${JenkinsUsername}
       --JenkinsPassword=${JenkinsPassword}
       --JSONFileName=${jsonResultsFile}
@@ -46,10 +45,39 @@
     <exec executable="python" failonerror="true">
       <arg value="AddSlavesToJenkins.py"/>
       <arg value="--JenkinsServerName=${JenkinsServerName}"/>
-      <arg value="--JenkinsServerPort=${JenkinsServerPort}"/>
       <arg value="--JenkinsUsername=${JenkinsUsername}"/>
       <arg value="--JenkinsPassword=${JenkinsPassword}"/>
       <arg value="--JSONFileName=${jsonResultsFile}"/>
+      <arg value="--LabelName=${labelName}"/>
+      <arg value="--NodeTemplateFileName=node_templ.xml"/>
+      <arg value="--SlaveUsername=${slaveUsername}"/>
+      <arg value="--SlavePassword=${slavePassword}"/>
+      <arg value="--SlaveJenkinsHome=${slaveJenkinsHome}"/>
+    </exec>
+  </target>
+  
+  <target name="addSingleSlaveToJenkins">
+    <echo>
+      Running command:
+      python AddSingleSlaveToJenkins.py
+      --JenkinsServerName=${JenkinsServerName}
+      --JenkinsUsername=${JenkinsUsername}
+      --JenkinsPassword=${JenkinsPassword}
+      --SlaveName=${slaveName}
+      --SlaveIp=${slaveIp}
+      --labelName=${labelName}
+      --NodeTemplateFileName=node_templ.xml
+      --SlaveUsername=${slaveUsername}
+      --SlavePassword=${slavePassword}
+      --SlaveJenkinsHome=${slaveJenkinsHome}
+    </echo>
+    <exec executable="python" failonerror="true">
+      <arg value="AddSingleSlaveToJenkins.py"/>
+      <arg value="--JenkinsServerName=${JenkinsServerName}"/>
+      <arg value="--JenkinsUsername=${JenkinsUsername}"/>
+      <arg value="--JenkinsPassword=${JenkinsPassword}"/>
+      <arg value="--SlaveName=${slaveName}"/>
+      <arg value="--SlaveIp=${slaveIp}"/>
       <arg value="--LabelName=${labelName}"/>
       <arg value="--NodeTemplateFileName=node_templ.xml"/>
       <arg value="--SlaveUsername=${slaveUsername}"/>
@@ -63,7 +91,6 @@
       Running command:
       python RemoveSlavesFromJenkins.py
       --JenkinsServerName=${JenkinsServerName}
-      --JenkinsServerPort=${JenkinsServerPort}
       --JenkinsUsername=${JenkinsUsername}
       --JenkinsPassword=${JenkinsPassword}
       --JSONFileName=${jsonResultsFile}
@@ -71,10 +98,29 @@
     <exec executable="python" failonerror="true">
       <arg value="RemoveSlavesFromJenkins.py"/>
       <arg value="--JenkinsServerName=${JenkinsServerName}"/>
-      <arg value="--JenkinsServerPort=${JenkinsServerPort}"/>
       <arg value="--JenkinsUsername=${JenkinsUsername}"/>
       <arg value="--JenkinsPassword=${JenkinsPassword}"/>
       <arg value="--JSONFileName=${jsonResultsFile}"/>
+    </exec>
+  </target>
+  
+  <target name="UpdatePipelineScriptOfJob">
+    <echo>
+      Running command:
+      python UpdatePipelineScriptsOfJob.py
+      --JenkinsServerName=${JenkinsServerName}
+      --JenkinsUsername=${JenkinsUsername}
+      --JenkinsPassword=${JenkinsPassword}
+      --JobName=${jobName}
+      --PipelineScript=${pipelineScript}
+    </echo>
+    <exec executable="python" failonerror="true">
+      <arg value="UpdatePipelineScriptOfJob.py"/>
+      <arg value="--JenkinsServerName=${JenkinsServerName}"/>
+      <arg value="--JenkinsUsername=${JenkinsUsername}"/>
+      <arg value="--JenkinsPassword=${JenkinsPassword}"/>
+      <arg value="--JobName=${jobName}"/>
+      <arg value="--PipelineScript=${pipelineScript}"/>
     </exec>
   </target>
 </project>
