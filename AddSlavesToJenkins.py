@@ -16,7 +16,6 @@ import Jenkins
 def main():
     parser = OptionParser()
     parser.add_option("-n", "--JenkinsServerName", dest="jenkins_server_name",help="JenkinsServerName")
-    parser.add_option("-p", "--JenkinsServerPort", dest="jenkins_server_port",help="JenkinsServerPort")
     parser.add_option("-s", "--JenkinsUsername", dest="jenkins_username",help="JenkinsUsername")
     parser.add_option("-r", "--JenkinsPassword", dest="jenkins_password",help="JenkinsPassword")
     parser.add_option("-j", "--JSONFileName", dest="json_filename",help="JSONFile")
@@ -26,13 +25,16 @@ def main():
     parser.add_option("-w", "--SlavePassword", dest="slave_password",help="SlavePassword")
     parser.add_option("-m", "--SlaveJenkinsHome", dest="slave_jenkins_home",help="SlaveJenkinsHome")
     (options, args) = parser.parse_args()
-    jenkins = Jenkins.Jenkins(options.jenkins_server_name, options.jenkins_server_port, options.jenkins_username, options.jenkins_password)
+    jenkins = Jenkins.Jenkins(options.jenkins_server_name, options.jenkins_username, options.jenkins_password)
     json_filename = options.json_filename
     label_name = options.label_name
     node_templ_filename = options.node_templ_filename
     slave_username = options.slave_username
     slave_password = options.slave_password
     slave_jenkins_home = options.slave_jenkins_home
+    
+    jenkins.update_jar('slave.jar')
+    jenkins.update_jar('jenkins-cli.jar')
     
     json_obj = json.load(file(json_filename))
     for vm_info in json_obj:
@@ -43,7 +45,11 @@ def main():
         root = tree.getroot()
         root.find('./name').text = vm_name
         root.find('./description').text = vm_ip
-        root.find('./label').text = label_name
+        root.find('./remoteFS').text = slave_jenkins_home
+        if label_name != vm_name:
+            root.find('./label').text = '{0} {1}'.format(label_name, vm_name)
+        else:
+            root.find('./label').text = label_name
         temp_filename = vm_name + '.xml'
         tree.write(temp_filename)
         # remove node(if exists) and add node
@@ -65,8 +71,9 @@ def main():
         # create task schedule to launch agent
         os.system('schtasks /create /S {0} /U {1} /P {2} /TN StartJenkinsAgent /TR "cmd /c {3}\\launchagent.bat" /SC MONTHLY /F'.format(vm_ip, slave_username, slave_password, slave_jenkins_home))
         os.system('schtasks /run /S {0} /U {1} /P {2} /TN StartJenkinsAgent'.format(vm_ip, slave_username, slave_password))
-        if jenkins.wait_node_online(vm_name) != 0:
-            raise Exception('Failed to connect node ' + vm_name)
+        ret = jenkins.wait_node_online(vm_name, 1800)
+        if ret != 0:
+            raise Exception('Failed to connect node {0}.  Return {1}'.format(vm_name, ret))
         jenkins.logout()
 
 if __name__ == "__main__":
